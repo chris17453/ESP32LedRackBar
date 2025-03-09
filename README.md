@@ -2,6 +2,8 @@
 
 This project provides a versatile firmware and control interface for ESP32-based LED matrix displays. It supports scrolling text, static text, and decorative "twinkle" effects, all controllable through a RESTful API.
 
+![Twinkle Animation](assets/twinkle.gif)
+
 ## Features
 
 - **Multi-Item Playlist**: Display a sequence of different content (text, effects) with customizable durations
