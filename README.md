@@ -4,6 +4,8 @@ This project provides a versatile firmware and control interface for ESP32-based
 
 ![Twinkle Animation](assets/twinkle.gif)
 
+![STL](assets/STL.png)
+
 ## Features
 
 - **Multi-Item Playlist**: Display a sequence of different content (text, effects) with customizable durations
@@ -167,3 +169,20 @@ Commands:
 - **Memory errors**: If the display behaves erratically, try the `reboot` command
 - **Can't find device on network**: Try using the IP address instead of hostname
 - **Web interface not responding**: Ensure the device has a stable WiFi connection
+
+
+
+## TODO
+
+- CLI effects display items in the item array but only at curent index.
+- Validate reboot reset
+- AP web interface unification
+- item managment via web build
+- Test API methods..
+- validate loop obeys delay and pause for each item
+- add gif/img display (array of bits)
+- convert twinkle from special method to a proper item type 
+- add other effects
+- look into SSL and security
+- look into profiles... 
+- look into a linux service to control the led rack
