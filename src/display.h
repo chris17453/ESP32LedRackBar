@@ -11,5 +11,6 @@ void initDisplay();
 void clearDisplayForModeChange(String oldMode, String newMode);
 void updateDisplay();
 void scrollPortalAddress();
+void showUpdatingMessage();
 
 #endif // DISPLAY_H

@@ -6,8 +6,14 @@
 void setupWiFi() {
   // WiFi Manager Setup
   WiFiManager wm;
+  
+  // Set timeout for configuration portal
   wm.setConfigPortalTimeout(180);
+  
+  // Custom CSS for the portal
   wm.setCustomHeadElement("<style>h1 { font-size: 22px; color: white; text-align: center; }</style>");
+  
+  // Callback when portal starts
   wm.setAPCallback([](WiFiManager* wm) {
     Serial.println("Started WiFi Manager Portal");
     disp.displayClear();
@@ -15,7 +21,27 @@ void setupWiFi() {
     // Start scrolling the portal address
     scrollPortalAddress();
   });
-
+  
+  // Add a save callback to trigger reboot after configuration is saved
+  wm.setSaveConfigCallback([]() {
+    Serial.println("WiFi configuration saved, preparing to restart...");
+    disp.displayClear();
+    disp.print("SAVED");
+    
+    // Delay to give the portal time to send the success response
+    // before we reboot the device
+    delay(2000);
+    
+    // Display a reboot message
+    disp.displayClear();
+    disp.print("REBOOT");
+    
+    // Schedule a restart after delay to let the browser receive the success page
+    Serial.println("WiFi credentials saved. Restarting in 3 seconds...");
+    delay(3000);
+    ESP.restart();
+  });
+  
   // Additional debugging before autoConnect
   Serial.println("Attempting to connect to WiFi...");
   Serial.println("AP Name: " + securityConfig.apName);
@@ -27,6 +53,14 @@ void setupWiFi() {
   WiFi.mode(WIFI_STA);
   delay(1000);
 
+  // Check if we have a valid configuration
+  bool hasConfig = (WiFi.SSID() != "");
+  if (hasConfig) {
+    Serial.println("WiFi credentials found in memory");
+  } else {
+    Serial.println("No WiFi credentials found - will start portal if connection fails");
+  }
+
   // Try to connect to WiFi
   bool connected = wm.autoConnect(securityConfig.apName.c_str());
   
@@ -37,7 +71,8 @@ void setupWiFi() {
     ESP.restart();
   }
   
-  // Connected to WiFi - Display connection details
+  // If we got here, we're connected to WiFi
+  // Display connection details
   String ip = WiFi.localIP().toString();
   String ssid = WiFi.SSID();
   String hostname = securityConfig.hostname;

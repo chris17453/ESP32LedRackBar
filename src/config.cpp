@@ -242,110 +242,308 @@ void changeApiKey(String newKey) {
   saveSecurityConfig();
   Serial.println("✅ API key updated successfully");
 }
-
 void factoryReset() {
   Serial.println("⚠️ FACTORY RESET INITIATED ⚠️");
+  updateInProgress = true;
   
   // Set the factory reset flag to prevent immediate reset on next boot
-  preferences.begin("powercycle", false);
-  preferences.putBool("factory_reset_done", true);
-  preferences.end();
+  Serial.println("Setting factory reset flag...");
+  bool prefSuccess = false;
+  try {
+    preferences.begin("powercycle", false);
+    prefSuccess = preferences.putBool("fr_done", true);
+    preferences.end();
+    
+    if (prefSuccess) {
+      Serial.println("Factory reset flag set successfully");
+    } else {
+      Serial.println("WARNING: Failed to set factory reset flag");
+    }
+  } catch (const std::exception& e) {
+    Serial.printf("ERROR: Exception in setting reset flag: %s\n", e.what());
+  } catch (...) {
+    Serial.println("ERROR: Unknown exception in setting reset flag");
+  }
   
-  // Display a simple reset message
-  disp.displayClear();
-  disp.print("RESET");
-  
-  // Reset WiFi settings first (this is most important)
-  WiFi.disconnect(true, true);
-  Serial.println("WiFi credentials cleared");
-  
-  // Try to safely clear files with error handling
+    // Reset WiFi settings with error handling and extra precautions
+    Serial.println("Clearing WiFi credentials...");
+    try {
+      // Initialize WiFi if not already done
+      WiFi.mode(WIFI_MODE_STA);
+      Serial.println("WiFi set to station mode");
+      delay(200); // Give it more time to initialize
+      
+      // Perform the disconnect with longer delay
+      Serial.println("Attempting WiFi.disconnect()...");
+      bool wifiDisconnectResult = WiFi.disconnect(true, true);
+      delay(500); // Allow more time for the operation to complete
+      
+      if (wifiDisconnectResult) {
+        Serial.println("WiFi credentials cleared successfully");
+      } else {
+        Serial.println("WARNING: WiFi.disconnect() returned false, trying alternative methods");
+        
+        // Try alternative approach - force WiFi reset through NVS
+        Serial.println("Attempting to clear WiFi settings through NVS...");
+        
+        // Try with Preferences API first (safer)
+        Preferences wifiPrefs;
+        if (wifiPrefs.begin("wifi", false)) {
+          size_t clearedBytes = wifiPrefs.clear();
+          wifiPrefs.end();
+          Serial.printf("WiFi preferences cleared (%d bytes)\n", clearedBytes);
+        }
+        
+        // If using WiFiManager, also try to clear its settings
+        #ifdef USE_WIFI_MANAGER
+        try {
+          Serial.println("Clearing WiFiManager settings...");
+          WiFiManager wifiManager;
+          wifiManager.resetSettings();
+          Serial.println("WiFiManager settings cleared");
+        } catch (...) {
+          Serial.println("Error while clearing WiFiManager settings");
+        }
+        #endif
+        
+        // Final attempt - restart WiFi subsystem
+        Serial.println("Restarting WiFi subsystem...");
+        WiFi.mode(WIFI_OFF);
+        delay(500);
+        WiFi.mode(WIFI_STA);
+        delay(500);
+      }
+    } catch (...) {
+      Serial.println("ERROR: Exception while clearing WiFi credentials");
+    }
+    
+  // Try to safely clear files with detailed error handling
+  Serial.println("Attempting to clear configuration files...");
   bool spiffsOk = false;
+  
   try {
     spiffsOk = SPIFFS.begin(true);  // Mount SPIFFS with formatting if needed
+    if (spiffsOk) {
+      Serial.println("SPIFFS mounted successfully");
+    } else {
+      Serial.println("ERROR: SPIFFS.begin() returned false");
+    }
+  } catch (const std::exception& e) {
+    Serial.printf("ERROR: Exception in SPIFFS.begin(): %s\n", e.what());
   } catch (...) {
-    Serial.println("SPIFFS begin failed");
+    Serial.println("ERROR: Unknown exception in SPIFFS.begin()");
   }
   
   if (spiffsOk) {
-    try {
-      SPIFFS.remove(CONFIG_FILE);
-      SPIFFS.remove(SECURITY_FILE);
-    } catch (...) {
-      Serial.println("File removal failed");
+    // Check if the files exist before removing
+    if (SPIFFS.exists(CONFIG_FILE)) {
+      Serial.printf("Found config file: %s\n", CONFIG_FILE);
+      try {
+        bool removeResult = SPIFFS.remove(CONFIG_FILE);
+        if (removeResult) {
+          Serial.printf("Successfully removed %s\n", CONFIG_FILE);
+        } else {
+          Serial.printf("ERROR: Failed to remove %s\n", CONFIG_FILE);
+        }
+      } catch (const std::exception& e) {
+        Serial.printf("ERROR: Exception while removing %s: %s\n", CONFIG_FILE, e.what());
+      } catch (...) {
+        Serial.printf("ERROR: Unknown exception while removing %s\n", CONFIG_FILE);
+      }
+    } else {
+      Serial.printf("WARNING: Config file %s does not exist\n", CONFIG_FILE);
+    }
+    
+    if (SPIFFS.exists(SECURITY_FILE)) {
+      Serial.printf("Found security file: %s\n", SECURITY_FILE);
+      try {
+        bool removeResult = SPIFFS.remove(SECURITY_FILE);
+        if (removeResult) {
+          Serial.printf("Successfully removed %s\n", SECURITY_FILE);
+        } else {
+          Serial.printf("ERROR: Failed to remove %s\n", SECURITY_FILE);
+        }
+      } catch (const std::exception& e) {
+        Serial.printf("ERROR: Exception while removing %s: %s\n", SECURITY_FILE, e.what());
+      } catch (...) {
+        Serial.printf("ERROR: Unknown exception while removing %s\n", SECURITY_FILE);
+      }
+    } else {
+      Serial.printf("WARNING: Security file %s does not exist\n", SECURITY_FILE);
+    }
+    
+    // List remaining files to verify deletion
+    Serial.println("Remaining files after deletion attempt:");
+    File root = SPIFFS.open("/");
+    File file = root.openNextFile();
+    bool filesExist = false;
+    
+    while (file) {
+      filesExist = true;
+      Serial.printf("  - %s (%d bytes)\n", file.name(), file.size());
+      file = root.openNextFile();
+    }
+    
+    if (!filesExist) {
+      Serial.println("  No files remaining in SPIFFS");
     }
     
     try {
       SPIFFS.end();  // Safely unmount
+      Serial.println("SPIFFS unmounted successfully");
+    } catch (const std::exception& e) {
+      Serial.printf("ERROR: Exception in SPIFFS.end(): %s\n", e.what());
     } catch (...) {
-      Serial.println("SPIFFS end failed");
+      Serial.println("ERROR: Unknown exception in SPIFFS.end()");
     }
   }
   
   // Reset preferences with error handling
+  Serial.println("Clearing all preferences...");
   try {
     preferences.begin("powercycle", false);
-    preferences.clear();  // Clear all preferences
+    size_t clearedBytes = preferences.clear();  // Clear all preferences
     preferences.end();
+    Serial.printf("Preferences cleared successfully (%d bytes)\n", clearedBytes);
+  } catch (const std::exception& e) {
+    Serial.printf("ERROR: Exception while clearing preferences: %s\n", e.what());
   } catch (...) {
-    Serial.println("Preferences clear failed");
+    Serial.println("ERROR: Unknown exception while clearing preferences");
   }
   
-  // Give the system time to finish all operations
+  Serial.println("Factory reset completed, waiting before restart...");
+  // Give the system time to finish all operations and serial output to complete
   delay(2000);
   
+  Serial.println("Restarting device...");
   // Restart the device
   ESP.restart();
 }
 
 void checkFactoryResetCondition() {
   preferences.begin("powercycle", false);
+  
+  // Get stored values
   unsigned int resetCount = preferences.getUInt("count", 0);
-  unsigned long lastResetTime = preferences.getULong("timestamp", 0);
+  unsigned long firstResetTime = preferences.getULong("first_reset", 0);
+  unsigned long lastResetTime = preferences.getULong("last_reset", 0);
   unsigned long currentTime = millis();
   
   // Check if this is the first boot after a factory reset
-  bool wasFactoryReset = preferences.getBool("factory_reset_done", false);
+  bool wasFactoryReset = preferences.getBool("fr_done", false);
+  
+  Serial.println("========== BOOT SEQUENCE CHECK ==========");
+  Serial.print("Reset count: ");
+  Serial.print(resetCount);
+  Serial.print(", First reset time: ");
+  Serial.print(firstResetTime);
+  Serial.print(", Last reset time: ");
+  Serial.print(lastResetTime);
+  Serial.print(", Current time: ");
+  Serial.println(currentTime);
   
   if (wasFactoryReset) {
     // Clear the factory reset flag and reset counters
-    preferences.putBool("factory_reset_done", false);
-    preferences.putUInt("count", 0);
-    preferences.putULong("timestamp", 0);
-    preferences.end();
-    
     Serial.println("✅ First boot after factory reset - skipping reset detection");
+    preferences.putBool("fr_done", false);
+    preferences.putUInt("count", 0);
+    preferences.putULong("first_reset", 0);
+    preferences.putULong("last_reset", currentTime);
+    preferences.end();
     return;
   }
   
-  Serial.println("Power cycle count: " + String(resetCount) + ", Last reset: " + String(lastResetTime) + "ms ago");
-  
-  // If we're within the reset window, increment counter
-  if (currentTime < RESET_WINDOW_MS && lastResetTime > 0) {
-    resetCount++;
-    Serial.println("Quick reboot detected! Count now: " + String(resetCount));
+  // Get the real-time clock time if available (more reliable than millis)
+  unsigned long realTimeSinceLastReset;
+  if (lastResetTime == 0) {
+    // This is the first recorded boot
+    realTimeSinceLastReset = RESET_WINDOW_MS + 1; // Set to something larger than window
+    Serial.println("First recorded boot - no previous timestamp");
+  } else {
+    // On ESP32, we can use more reliable time sources if available
+    // For this example, we'll use millis() but in a real implementation
+    // you might want to use RTC time or other persistent time source
     
-    // Check if we've hit the threshold
-    if (resetCount >= RESET_COUNT_THRESHOLD) {
-      // Reset counter
-      preferences.putUInt("count", 0);
-      preferences.putULong("timestamp", 0);
-      // Set the factory reset flag to true to skip detection on next boot
-      preferences.putBool("factory_reset_done", true);
-      preferences.end();
+    // Calculate time between now and the last reset
+    // Since millis() resets on reboot, we're actually checking how long 
+    // the system has been up since the reboot
+    realTimeSinceLastReset = currentTime;
+    
+    Serial.print("System uptime since reboot: ");
+    Serial.print(realTimeSinceLastReset);
+    Serial.println("ms");
+  }
+  
+  // If we've been up less than RESET_WINDOW_MS, it's a quick boot
+  if (realTimeSinceLastReset < RESET_WINDOW_MS) {
+    // This is a quick reboot
+    
+    if (resetCount == 0) {
+      // First quick reboot in the sequence
+      resetCount = 1;
+      firstResetTime = currentTime; // Mark the start of our reset sequence
+      Serial.println("👉 First quick reboot detected. Count = 1");
+    } else {
+      // We're continuing a sequence of quick reboots
+      resetCount++;
+      Serial.print("👉 Quick reboot sequence continues. Count = ");
+      Serial.println(resetCount);
       
-      // Perform factory reset
-      factoryReset();
-      // factoryReset will restart the device, so we won't get past this point
+      // Calculate total time from first quick reboot to now
+      unsigned long totalSequenceTime;
+      if (currentTime >= firstResetTime) {
+        totalSequenceTime = currentTime - firstResetTime;
+      } else {
+        // Handle millis() rollover or anomaly
+        totalSequenceTime = RESET_WINDOW_MS * 3; // Force out of range
+      }
+      
+      Serial.print("Total time for ");
+      Serial.print(resetCount);
+      Serial.print(" reboots: ");
+      Serial.print(totalSequenceTime);
+      Serial.println("ms");
+      
+      // Check if the entire sequence is within our window
+      // For 3 quick reboots, they should all happen within 
+      // approximately 3 * RESET_WINDOW_MS total time
+      if (resetCount >= RESET_COUNT_THRESHOLD) {
+        if (totalSequenceTime < (RESET_WINDOW_MS * 3)) {
+          // Reset counter
+          Serial.println("⚠️ FACTORY RESET TRIGGERED - 3 quick reboots detected within window");
+          preferences.putUInt("count", 0);
+          preferences.putULong("first_reset", 0);
+          preferences.putULong("last_reset", 0);
+          // Set the factory reset flag to true to skip detection on next boot
+          preferences.putBool("fr_done", true);
+          preferences.end();
+          
+          // Perform factory reset
+          factoryReset();
+          // factoryReset will restart the device, so we won't get past this point
+          return;
+        } else {
+          // We had 3 reboots but they took too long overall
+          Serial.println("⚠️ 3 reboots detected, but total sequence time exceeded window");
+          // Reset the sequence
+          resetCount = 1;
+          firstResetTime = currentTime;
+        }
+      }
     }
   } else {
-    // Reset count if outside window
-    resetCount = 1;
-    Serial.println("Normal boot or outside reset window. Reset count: " + String(resetCount));
+    // System has been up too long - this is a normal boot
+    // Reset the sequence counters
+    resetCount = 0;
+    firstResetTime = 0;
+    Serial.println("Normal boot (system up too long). Reset sequence cleared.");
   }
   
   // Update reset information
   preferences.putUInt("count", resetCount);
-  preferences.putULong("timestamp", currentTime);
+  preferences.putULong("first_reset", firstResetTime);
+  preferences.putULong("last_reset", currentTime);
   preferences.end();
+  Serial.println("Reset detection complete - continuing normal boot");
+  Serial.println("==========================================");
 }

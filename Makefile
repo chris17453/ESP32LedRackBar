@@ -44,6 +44,8 @@ help:
 	@echo "  manual-reset         - Perform manual WiFi reset"
 	@echo "  update-hostname NAME - Update device hostname to NAME"
 	@echo "  reboot                - Reboot the device"
+	@echo "  multi-items-demo      - All item typoes in a demo"
+	@echo "  download-config       - pull the stored config for the device"
 
 reboot:
 	python $(CLIENT) $(ARGS) reboot
@@ -141,6 +143,12 @@ wifi-update:
 	read -p "Enter Password: " pass; \
 	python $(CLIENT) $(ARGS) update-wifi --ssid "$$ssid" --password "$$pass"
 
-# Reset commands
 manual-reset:
 	python $(CLIENT) $(ARGS) manual-reset
+
+multi-items-demo:
+	python $(CLIENT) $(ARGS) multi-items-demo
+
+
+download-config:
+	python $(CLIENT) $(ARGS) download-config

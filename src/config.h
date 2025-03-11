@@ -30,6 +30,8 @@ class AsyncWebServerRequest;
 extern MD_Parola disp;
 extern AsyncWebServer server;
 extern Preferences preferences;
+extern bool updateInProgress;
+
 
 // Define a structure for a single display item
 struct DisplayItem {

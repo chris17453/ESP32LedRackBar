@@ -116,12 +116,13 @@ def replace_all_items(host, items, api_key, retries=3):
     for attempt in range(retries):
         try:
             print(f"Replacing all display items (attempt {attempt+1}/{retries})...")
-            response = requests.post(f"http://{host}/items/replace", 
+            response = requests.post(f"http://{host}/items_replace", 
                                     json={"items": items},
                                     headers=headers,
                                     timeout=10)
             if response.status_code == 200:
                 data = response.json()
+                print(data)
                 print("✅ Items replaced successfully!")
                 print(f"   Total items: {data.get('count')}")
                 return True
@@ -183,36 +184,46 @@ def setup_multiple_items(host, api_key):
     items = [
         {
             "mode": "text", 
-            "text": "First text message", 
-            "alignment": "center",
+            "text": "Watkins Labs", 
+            "alignment": "scroll_right",
             "brightness": 12,
             "scrollSpeed": 50,
             "pauseTime": 2000,
-            "duration": 5000, # 5 seconds
+            "duration": 10000,
             "deleteAfterPlay": False,
             "maxPlays": 0
         },
         {
             "mode": "twinkle",
             "brightness": 10,
-            "twinkleDensity": 25,
+            "twinkleDensity": 50,
             "twinkleMinSpeed": 50,
             "twinkleMaxSpeed": 300,
-            "duration": 8000, # 8 seconds
+            "duration": 4000, 
             "deleteAfterPlay": False,
             "maxPlays": 0
         },
         {
             "mode": "text",
-            "text": "Second text message - will auto-scroll",
+            "text": "Admiral Rackbar the LED Rack Bar",
             "alignment": "scroll_left",
             "brightness": 15,
             "scrollSpeed": 40,
             "pauseTime": 1000,
-            "duration": 10000, # 10 seconds
+            "duration": 10000,
             "deleteAfterPlay": False,
             "maxPlays": 0
-        }
+        },
+        {
+            "mode": "twinkle",
+            "brightness": 10,
+            "twinkleDensity": 80,
+            "twinkleMinSpeed": 50,
+            "twinkleMaxSpeed": 300,
+            "duration": 4000, 
+            "deleteAfterPlay": False,
+            "maxPlays": 0
+        },
     ]
     
     # Send the request to replace all items
@@ -221,13 +232,9 @@ def setup_multiple_items(host, api_key):
     
     if success:
         print("✅ Multiple items set up successfully!")
-        print("  Item 1: Text (center aligned, 5 seconds duration)")
-        print("  Item 2: Twinkle (8 seconds duration)")
-        print("  Item 3: Scrolling text (10 seconds duration)")
         print("\nThe display will cycle through these items in sequence.")
-        
         # Get the updated settings to verify
-        get_items(host, api_key)
+        #get_items(host, api_key)
     else:
         print("❌ Failed to set up multiple items")
     

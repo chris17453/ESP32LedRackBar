@@ -85,6 +85,17 @@ void setup() {
 }
 
 void loop() {
+
+  // Check if an update is in progress
+  if (updateInProgress) {
+    // Display the updating message
+    disp.displayClear();
+    disp.setTextAlignment(PA_CENTER);
+    disp.print("UPDATING");
+    return; // Skip the rest of the loop while updating
+  }
+
+
   // First check if we're in IP display mode
   if (ipDisplayConfig.active) {
     // Check if the IP display time has elapsed

@@ -3,3 +3,7 @@
 
 // Global preferences
 Preferences preferences;
+bool updateInProgress = false;
+
+
+

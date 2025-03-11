@@ -97,3 +97,20 @@ void scrollPortalAddress() {
     yield(); // Allow WiFiManager to process
   }
 }
+
+void showUpdatingMessage() {
+  // Clear the current display
+  disp.displayClear();
+  
+  // Set text alignment to center
+  disp.setTextAlignment(PA_CENTER);
+  
+  // Set a standard brightness
+  disp.setIntensity(10);
+  
+  // Show the message
+  disp.print("UPDATING");
+  
+  // Force display refresh
+  disp.getGraphicObject()->update();
+}

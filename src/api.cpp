@@ -76,7 +76,8 @@ void setupApiEndpoints() {
       request->send(401, "application/json", "{\"error\":\"Unauthorized. Valid API key required.\"}");
       return;
     }
-    
+    updateInProgress = true;
+
     JsonDocument doc;
     JsonArray itemsArray = doc.createNestedArray("items");
     
@@ -106,15 +107,20 @@ void setupApiEndpoints() {
     serializeJson(doc, response);
     Serial.println("✅ Items requested via API");
     request->send(200, "application/json", response);
+    updateInProgress = false;
+
   });
 
   server.on("/items", HTTP_POST, [](AsyncWebServerRequest *request) {
+    Serial.println("DEBUG: /items POST endpoint called!");
     // Validate API key
     if (!validateApiKey(request)) {
       request->send(401, "application/json", "{\"error\":\"Unauthorized. Valid API key required.\"}");
       return;
     }
   }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    updateInProgress = true;
+
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data);
     if (error) {
@@ -190,108 +196,209 @@ void setupApiEndpoints() {
     String response;
     serializeJson(responseDoc, response);
     request->send(200, "application/json", response);
+    updateInProgress = false;
+
   });
   
-  // Update or replace all items
-  server.on("/items/replace", HTTP_POST, [](AsyncWebServerRequest *request) {
-    // Validate API key
-    if (!validateApiKey(request)) {
-      request->send(401, "application/json", "{\"error\":\"Unauthorized. Valid API key required.\"}");
-      return;
+// Update or replace all items
+server.on("/items_replace", HTTP_POST, [](AsyncWebServerRequest *request) {
+  Serial.println("DEBUG: /items/replace POST endpoint called!");
+
+  // Validate API key
+  if (!validateApiKey(request)) {
+    Serial.println("❌ ERROR: Items replace - Invalid API key");
+    request->send(401, "application/json", "{\"error\":\"Unauthorized. Valid API key required.\"}");
+    return;
+  }
+}, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+
+  Serial.println("\n========== ITEMS REPLACE API CALLED ==========");
+  Serial.println("✅ API Key validation successful");
+  Serial.print("📦 Received data size: ");
+  Serial.println(total);
+  
+  updateInProgress = true;
+  Serial.println("🚩 Update flag set to true");
+
+  // Log initial state
+  Serial.print("📊 BEFORE UPDATE: Current item count: ");
+  Serial.println(config.items.size());
+  Serial.print("📊 BEFORE UPDATE: Current item index: ");
+  Serial.println(config.currentItemIndex);
+  
+  for (size_t i = 0; i < config.items.size(); i++) {
+    Serial.print("  Item ");
+    Serial.print(i);
+    Serial.print(": Mode=");
+    Serial.print(config.items[i].mode);
+    if (config.items[i].mode == "text") {
+      Serial.print(", Text='");
+      Serial.print(config.items[i].text);
+      Serial.print("'");
     }
-  }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, data);
-    if (error) {
-      request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
-      return;
+    Serial.println();
+  }
+
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, data);
+  if (error) {
+    Serial.print("❌ ERROR: JSON parse error: ");
+    Serial.println(error.c_str());
+    request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    updateInProgress = false;
+    return;
+  }
+  
+  Serial.println("✅ JSON parsed successfully");
+  
+  // Check if we have an items array
+  if (!doc["items"].is<JsonArray>()) {
+    Serial.println("❌ ERROR: 'items' array is missing in request");
+    request->send(400, "application/json", "{\"error\":\"items array is required\"}");
+    updateInProgress = false;
+    return;
+  }
+  
+  Serial.println("✅ 'items' array found in request");
+  Serial.print("📊 Incoming items count: ");
+  Serial.println(doc["items"].as<JsonArray>().size());
+  
+  // Clear existing items
+  size_t oldCount = config.items.size();
+  config.items.clear();
+  Serial.print("🗑️ Cleared existing items. Old count: ");
+  Serial.print(oldCount);
+  Serial.print(", New count: ");
+  Serial.println(config.items.size());
+  
+  // Add new items
+  int newItemsAdded = 0;
+  for (JsonObject itemObj : doc["items"].as<JsonArray>()) {
+    DisplayItem item;
+    
+    item.mode = itemObj["mode"] | "text";
+    item.text = itemObj["text"] | "New Item";
+    
+    String alignment = itemObj["alignment"] | "scroll_left";
+    if (alignment == "left") {
+      item.alignment = PA_LEFT;
+    } else if (alignment == "right") {
+      item.alignment = PA_RIGHT;
+    } else if (alignment == "center") {
+      item.alignment = PA_CENTER;
+    } else if (alignment == "scroll_left") {
+      item.alignment = PA_SCROLL_LEFT;
+    } else if (alignment == "scroll_right") {
+      item.alignment = PA_SCROLL_RIGHT;
+    } else {
+      item.alignment = PA_SCROLL_LEFT;
     }
     
-    // Check if we have an items array
-    if (!doc["items"].is<JsonArray>()) {
-      request->send(400, "application/json", "{\"error\":\"items array is required\"}");
-      return;
+    item.invert = itemObj["invert"] | false;
+    item.brightness = itemObj["brightness"] | DEFAULT_BRIGHTNESS;
+    item.scrollSpeed = itemObj["scrollSpeed"] | DEFAULT_SCROLL_SPEED;
+    item.pauseTime = itemObj["pauseTime"] | DEFAULT_PAUSE_TIME;
+    item.twinkleDensity = itemObj["twinkleDensity"] | DEFAULT_TWINKLE_DENSITY;
+    item.twinkleMinSpeed = itemObj["twinkleMinSpeed"] | DEFAULT_TWINKLE_MIN_SPEED;
+    item.twinkleMaxSpeed = itemObj["twinkleMaxSpeed"] | DEFAULT_TWINKLE_MAX_SPEED;
+    item.duration = itemObj["duration"] | 0;
+    item.playCount = itemObj["playCount"] | 0;
+    item.maxPlays = itemObj["maxPlays"] | 0;
+    item.deleteAfterPlay = itemObj["deleteAfterPlay"] | false;
+    
+    config.items.push_back(item);
+    newItemsAdded++;
+    
+    Serial.print("➕ Added item #");
+    Serial.print(newItemsAdded);
+    Serial.print(": Mode='");
+    Serial.print(item.mode);
+    Serial.print("'");
+    if (item.mode == "text") {
+      Serial.print(", Text='");
+      Serial.print(item.text);
+      Serial.print("'");
     }
+    Serial.print(", Alignment=");
+    Serial.print(alignment);
+    Serial.print(", Duration=");
+    Serial.print(item.duration);
+    Serial.println("ms");
+  }
+  
+  Serial.print("📊 AFTER ADDING: Items count: ");
+  Serial.println(config.items.size());
+  
+  // If no items were added, add a default one
+  if (config.items.empty()) {
+    Serial.println("⚠️ No items were added, adding default item");
     
-    // Clear existing items
-    config.items.clear();
+    DisplayItem defaultItem;
+    defaultItem.mode = "text";
+    defaultItem.text = "ESP32 LED Display";
+    defaultItem.alignment = PA_SCROLL_LEFT;
+    defaultItem.invert = false;
+    defaultItem.brightness = DEFAULT_BRIGHTNESS;
+    defaultItem.scrollSpeed = DEFAULT_SCROLL_SPEED;
+    defaultItem.pauseTime = DEFAULT_PAUSE_TIME;
+    defaultItem.twinkleDensity = DEFAULT_TWINKLE_DENSITY;
+    defaultItem.twinkleMinSpeed = DEFAULT_TWINKLE_MIN_SPEED;
+    defaultItem.twinkleMaxSpeed = DEFAULT_TWINKLE_MAX_SPEED;
+    defaultItem.duration = 0;
+    defaultItem.playCount = 0;
+    defaultItem.maxPlays = 0;
+    defaultItem.deleteAfterPlay = false;
     
-    // Add new items
-    for (JsonObject itemObj : doc["items"].as<JsonArray>()) {
-      DisplayItem item;
-      
-      item.mode = itemObj["mode"] | "text";
-      item.text = itemObj["text"] | "New Item";
-      
-      String alignment = itemObj["alignment"] | "scroll_left";
-      if (alignment == "left") {
-        item.alignment = PA_LEFT;
-      } else if (alignment == "right") {
-        item.alignment = PA_RIGHT;
-      } else if (alignment == "center") {
-        item.alignment = PA_CENTER;
-      } else if (alignment == "scroll_left") {
-        item.alignment = PA_SCROLL_LEFT;
-      } else if (alignment == "scroll_right") {
-        item.alignment = PA_SCROLL_RIGHT;
-      } else {
-        item.alignment = PA_SCROLL_LEFT;
-      }
-      
-      item.invert = itemObj["invert"] | false;
-      item.brightness = itemObj["brightness"] | DEFAULT_BRIGHTNESS;
-      item.scrollSpeed = itemObj["scrollSpeed"] | DEFAULT_SCROLL_SPEED;
-      item.pauseTime = itemObj["pauseTime"] | DEFAULT_PAUSE_TIME;
-      item.twinkleDensity = itemObj["twinkleDensity"] | DEFAULT_TWINKLE_DENSITY;
-      item.twinkleMinSpeed = itemObj["twinkleMinSpeed"] | DEFAULT_TWINKLE_MIN_SPEED;
-      item.twinkleMaxSpeed = itemObj["twinkleMaxSpeed"] | DEFAULT_TWINKLE_MAX_SPEED;
-      item.duration = itemObj["duration"] | 0;
-      item.playCount = itemObj["playCount"] | 0;
-      item.maxPlays = itemObj["maxPlays"] | 0;
-      item.deleteAfterPlay = itemObj["deleteAfterPlay"] | false;
-      
-      config.items.push_back(item);
+    config.items.push_back(defaultItem);
+    
+    Serial.print("➕ Added default item. New count: ");
+    Serial.println(config.items.size());
+  }
+  
+  // Reset to the first item
+  config.currentItemIndex = 0;
+  config.itemStartTime = 0;
+  textNeedsUpdate = true;
+  
+  Serial.println("🔄 Reset to first item and set text update flag");
+  
+  // Save the config
+  Serial.println("💾 Saving configuration to SPIFFS...");
+  saveConfig();
+  Serial.println("✅ Configuration saved");
+  
+  // Log final state
+  Serial.print("📊 FINAL: Items count: ");
+  Serial.println(config.items.size());
+  for (size_t i = 0; i < config.items.size(); i++) {
+    Serial.print("  Item ");
+    Serial.print(i);
+    Serial.print(": Mode=");
+    Serial.print(config.items[i].mode);
+    if (config.items[i].mode == "text") {
+      Serial.print(", Text='");
+      Serial.print(config.items[i].text);
+      Serial.print("'");
     }
-    
-    // If no items were added, add a default one
-    if (config.items.empty()) {
-      DisplayItem defaultItem;
-      defaultItem.mode = "text";
-      defaultItem.text = "ESP32 LED Display";
-      defaultItem.alignment = PA_SCROLL_LEFT;
-      defaultItem.invert = false;
-      defaultItem.brightness = DEFAULT_BRIGHTNESS;
-      defaultItem.scrollSpeed = DEFAULT_SCROLL_SPEED;
-      defaultItem.pauseTime = DEFAULT_PAUSE_TIME;
-      defaultItem.twinkleDensity = DEFAULT_TWINKLE_DENSITY;
-      defaultItem.twinkleMinSpeed = DEFAULT_TWINKLE_MIN_SPEED;
-      defaultItem.twinkleMaxSpeed = DEFAULT_TWINKLE_MAX_SPEED;
-      defaultItem.duration = 0;
-      defaultItem.playCount = 0;
-      defaultItem.maxPlays = 0;
-      defaultItem.deleteAfterPlay = false;
-      
-      config.items.push_back(defaultItem);
-    }
-    
-    // Reset to the first item
-    config.currentItemIndex = 0;
-    config.itemStartTime = 0;
-    textNeedsUpdate = true;
-    
-    // Save the config
-    saveConfig();
-    
-    // Send response
-    JsonDocument responseDoc;
-    responseDoc["status"] = "success";
-    responseDoc["message"] = "Items replaced successfully";
-    responseDoc["count"] = config.items.size();
-    
-    String response;
-    serializeJson(responseDoc, response);
-    request->send(200, "application/json", response);
-  });
+    Serial.println();
+  }
+  
+  // Send response
+  JsonDocument responseDoc;
+  responseDoc["status"] = "success";
+  responseDoc["message"] = "Items replaced successfully";
+  responseDoc["count"] = config.items.size();
+  
+  String response;
+  serializeJson(responseDoc, response);
+  Serial.print("📤 Sending response: ");
+  Serial.println(response);
+  request->send(200, "application/json", response);
+  
+  updateInProgress = false;
+  Serial.println("🚩 Update flag set to false");
+  Serial.println("=========== ITEMS REPLACE API COMPLETED ===========\n");
+});
   
   // Delete a specific item
   server.on("/items/delete", HTTP_POST, [](AsyncWebServerRequest *request) {
@@ -301,6 +408,8 @@ void setupApiEndpoints() {
       return;
     }
   }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    updateInProgress = true;
+
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data);
     if (error) {
@@ -370,6 +479,8 @@ void setupApiEndpoints() {
     String response;
     serializeJson(responseDoc, response);
     request->send(200, "application/json", response);
+    updateInProgress = false;
+
   });
   
   // Security settings endpoint
@@ -400,6 +511,8 @@ void setupApiEndpoints() {
       return;
     }
   }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    updateInProgress = true;
+
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data);
     if (error) {
@@ -431,6 +544,8 @@ void setupApiEndpoints() {
     } else {
       request->send(400, "application/json", "{\"error\":\"No valid settings provided\"}");
     }
+    updateInProgress = false;
+
   });
   
   // Get specific setting
@@ -542,8 +657,11 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     
     request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"Factory reset initiated\"}");
     // Slight delay to allow response to be sent
+    updateInProgress = true;
     delay(500);
+
     factoryReset();
+    updateInProgress = false;
   });
   
   // API key change endpoint
@@ -554,6 +672,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
       return;
     }
   }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    updateInProgress = true;
+
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data);
     if (error) {
@@ -574,6 +694,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     
     changeApiKey(newKey);
     request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"API key updated\"}");
+    updateInProgress = false;
+
   });
 
   server.on("/update_display", HTTP_POST, [](AsyncWebServerRequest *request) {
@@ -827,7 +949,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(401, "application/json", "{\"error\":\"Unauthorized. Valid API key required.\"}");
       return;
     }
-    
+    updateInProgress = true;
+
     // Send success response first so client gets it before we reset
     request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"Manual factory reset initiated\"}");
     
@@ -854,6 +977,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
       return;
     }
   }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    updateInProgress = true;
+
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data);
     if (error) {
@@ -919,6 +1044,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
       Serial.println("\n❌ Failed to connect with new credentials");
       Serial.println("Will revert to Access Point mode on next restart");
     }
+    updateInProgress = false;
+
   });
 
   // Update hostname endpoint
@@ -929,6 +1056,7 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
       return;
     }
   }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    updateInProgress = true;
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data);
     if (error) {
@@ -980,6 +1108,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "application/json", response);
     
     Serial.println("✅ Hostname updated to: " + newHostname);
+    updateInProgress = false;
+
   });
 
   // Reboot device endpoint
