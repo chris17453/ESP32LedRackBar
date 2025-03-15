@@ -179,10 +179,9 @@ def setup_temporary_item(host, api_key):
 def setup_multiple_items(host, api_key):
     """Set up multiple items for testing: a text, twinkle, and another text."""
     print("📋 Setting up multiple display items...")
-    
-    # Define the items
+
     items = [
-        {
+            {
             "mode": "text", 
             "text": "Watkins Labs", 
             "alignment": "scroll_right",
@@ -194,12 +193,71 @@ def setup_multiple_items(host, api_key):
             "maxPlays": 0
         },
         {
-            "mode": "twinkle",
-            "brightness": 10,
-            "twinkleDensity": 50,
-            "twinkleMinSpeed": 50,
-            "twinkleMaxSpeed": 300,
-            "duration": 4000, 
+                "mode": "twinkle", 
+                "brightness": 10,
+                "twinkleDensity": 15,
+                "twinkleMinSpeed": 50,
+                "twinkleMaxSpeed": 300,
+                "duration": 4000,
+
+            }, 
+            {
+            "mode": "text",
+            "text": "Admiral Rackbar the LED Rack Bar",
+            "alignment": "scroll_left",
+            "brightness": 15,
+            "scrollSpeed": 40,
+            "pauseTime": 1000,
+            "duration": 10000,
+            "deleteAfterPlay": False,
+            "maxPlays": 0
+        },
+                {
+                "mode": "twinkle", 
+                "brightness": 20,
+                "twinkleDensity": 80,
+                "twinkleMinSpeed": 50,
+                "twinkleMaxSpeed": 30,
+                "duration": 4000,
+
+            },
+                {
+                "mode": "knightrider",
+                "knightRiderSpeed": 80,
+                "knightRiderTailLength": 4,
+                "brightness": 20,
+                "duration": 8000,
+                "invert": False
+                },
+                {
+                "mode": "pong",
+                "pongSpeed": 80,
+                "pongBallSpeedX": 3.7,
+                "pongBallSpeedY":3.3,
+                "brightness": 15,
+                "duration": 8000,
+                "invert": False
+                },
+                {
+                "mode": "sinewave",
+                "sineWaveSpeed": 50,
+                "sineWaveAmplitude": 3,
+                "sineWavePhases": 2,
+                "brightness": 10,
+                "duration": 8000,
+                "invert": False
+                }
+            ]
+    
+    x="""
+            {
+            "mode": "text", 
+            "text": "Watkins Labs", 
+            "alignment": "scroll_right",
+            "brightness": 12,
+            "scrollSpeed": 50,
+            "pauseTime": 2000,
+            "duration": 10000,
             "deleteAfterPlay": False,
             "maxPlays": 0
         },
@@ -214,18 +272,7 @@ def setup_multiple_items(host, api_key):
             "deleteAfterPlay": False,
             "maxPlays": 0
         },
-        {
-            "mode": "twinkle",
-            "brightness": 10,
-            "twinkleDensity": 80,
-            "twinkleMinSpeed": 50,
-            "twinkleMaxSpeed": 300,
-            "duration": 4000, 
-            "deleteAfterPlay": False,
-            "maxPlays": 0
-        },
-    ]
-    
+"""       
     # Send the request to replace all items
 # Send the request to replace all items
     success = replace_all_items(host, items, api_key)

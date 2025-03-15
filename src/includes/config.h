@@ -42,14 +42,35 @@ struct DisplayItem {
   int brightness;           // Display brightness (0-15)
   int scrollSpeed;          // Text scroll speed
   int pauseTime;            // Pause time at end of scroll
-  int twinkleDensity;       // Twinkle density (for twinkle mode)
-  int twinkleMinSpeed;      // Min twinkle speed (for twinkle mode)
-  int twinkleMaxSpeed;      // Max twinkle speed (for twinkle mode)
   unsigned long duration;   // How long to show this item (ms, 0 = forever)
   int playCount;            // Number of times item has been played
   int maxPlays;             // Maximum times to play (0 = unlimited)
   bool deleteAfterPlay;     // Whether to delete after playing
+
+
+  // Twinkle effect parameters
+  int twinkleDensity;       // Twinkle density (for twinkle mode)
+  int twinkleMinSpeed;      // Min twinkle speed (for twinkle mode)
+  int twinkleMaxSpeed;      // Max twinkle speed (for twinkle mode)
+
+  // Knight Rider effect parameters
+  int knightRiderSpeed;     // Update interval in ms
+  int knightRiderTailLength; // Length of the tail
+  
+  // Pong effect parameters
+  int pongSpeed;            // Update interval in ms
+  float pongBallSpeedX;     // Horizontal ball speed
+  float pongBallSpeedY;     // Vertical ball speed
+  
+  // Sine wave effect parameters
+  int sineWaveSpeed;        // Update interval in ms
+  int sineWaveAmplitude;    // Wave amplitude
+  int sineWavePhases;       // Number of overlapping waves
 };
+
+
+
+
 
 // Main configuration structure with array of display items
 struct DisplayConfig {

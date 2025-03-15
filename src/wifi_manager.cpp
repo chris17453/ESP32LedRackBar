@@ -1,78 +1,151 @@
 #include <WiFiManager.h>
-#include "wifi_manager.h"
-#include "display.h"
+#include "includes/wifi_manager.h"
+#include "includes/display.h"
+#include "includes/utils.h"
 #include <ESPAsyncWebServer.h>
 
-void setupWiFi() {
-  // WiFi Manager Setup
-  WiFiManager wm;
-  
-  // Set timeout for configuration portal
-  wm.setConfigPortalTimeout(180);
-  
-  // Custom CSS for the portal
-  wm.setCustomHeadElement("<style>h1 { font-size: 22px; color: white; text-align: center; }</style>");
-  
-  // Callback when portal starts
-  wm.setAPCallback([](WiFiManager* wm) {
-    Serial.println("Started WiFi Manager Portal");
-    disp.displayClear();
-    
-    // Start scrolling the portal address
-    scrollPortalAddress();
-  });
-  
-  // Add a save callback to trigger reboot after configuration is saved
-  wm.setSaveConfigCallback([]() {
-    Serial.println("WiFi configuration saved, preparing to restart...");
-    disp.displayClear();
-    disp.print("SAVED");
-    
-    // Delay to give the portal time to send the success response
-    // before we reboot the device
-    delay(2000);
-    
-    // Display a reboot message
-    disp.displayClear();
-    disp.print("REBOOT");
-    
-    // Schedule a restart after delay to let the browser receive the success page
-    Serial.println("WiFi credentials saved. Restarting in 3 seconds...");
-    delay(3000);
-    ESP.restart();
-  });
-  
-  // Additional debugging before autoConnect
-  Serial.println("Attempting to connect to WiFi...");
-  Serial.println("AP Name: " + securityConfig.apName);
-  Serial.println("If connection fails, connect to this AP to configure WiFi");
-  
-  // Clear any previous connection issues
-  WiFi.disconnect(true);
-  delay(1000);
+// Add to wifi_manager.cpp
+
+WiFiSetupState wifiState = WIFI_INIT;
+WiFiManager wifiManager;
+unsigned long wifiOperationStartTime = 0;
+unsigned long lastPortalAnimationTime = 0;
+
+
+void startWiFiSetup() {
+  Serial.println("Starting WiFi setup...");
+  wifiState = WIFI_INIT;
+
+  // Ensure WiFi settings are stored persistently
+  WiFi.persistent(true);
+  WiFi.setAutoReconnect(true);
   WiFi.mode(WIFI_STA);
-  delay(1000);
 
-  // Check if we have a valid configuration
-  bool hasConfig = (WiFi.SSID() != "");
-  if (hasConfig) {
-    Serial.println("WiFi credentials found in memory");
+  // Configure WiFiManager
+  wifiManager.setConfigPortalTimeout(180);
+  wifiManager.setCustomHeadElement("<style>h1 { font-size: 22px; color: white; text-align: center; }</style>");
+
+  // Callback when portal starts
+  wifiManager.setAPCallback([](WiFiManager* wm) {
+      Serial.println("Started WiFi Manager Portal");
+      disp.displayClear();
+      
+      String portalMsg = "Connect to WiFi: " + securityConfig.apName + " - Visit: 192.168.4.1";
+      disp.displayClear();
+      disp.setTextAlignment(PA_LEFT);
+      disp.setSpeed(40);
+      disp.displayText(portalMsg.c_str(), PA_LEFT, 40, 1000, PA_SCROLL_LEFT, PA_SCROLL_LEFT);
+
+      wifiState = WIFI_PORTAL_ACTIVE;
+      wifiOperationStartTime = millis();
+  });
+
+  // Save credentials callback
+  wifiManager.setSaveConfigCallback([]() {
+      Serial.println("WiFi configuration saved, ensuring persistence...");
+
+      WiFi.persistent(true); // Save credentials to flash
+      WiFi.setAutoConnect(true);
+      WiFi.begin(); // Apply credentials immediately
+
+      Serial.println("Waiting 2 seconds before restarting...");
+      delayWithWatchdog(2000);
+  });
+
+  // Try auto-connect before launching portal
+  if (wifiManager.autoConnect(securityConfig.apName.c_str())) {
+      Serial.println("Connected to WiFi!");
+      wifiState = WIFI_CONNECTED;
+      setupPostWiFiConnection();
+      return;
+  }
+
+  Serial.println("No WiFi credentials found - starting portal");
+
+  // If autoConnect() fails, start portal mode
+  if (wifiManager.startConfigPortal(securityConfig.apName.c_str())) {
+      Serial.println("Portal configuration successful!");
+      wifiState = WIFI_CONNECTED;
   } else {
-    Serial.println("No WiFi credentials found - will start portal if connection fails");
+      Serial.println("Portal timeout - Restarting WiFi Manager");
+      wifiState = WIFI_PORTAL_ACTIVE;
+      wifiOperationStartTime = millis();
   }
+}
 
-  // Try to connect to WiFi
-  bool connected = wm.autoConnect(securityConfig.apName.c_str());
-  
-  if (!connected) {
-    Serial.println("WiFi Failed, restarting...");
-    // Wait a bit before restarting
-    delay(3000);
-    ESP.restart();
+
+void processWiFiSetup() {
+    switch (wifiState) {
+    case WIFI_INIT:
+      // Should not happen, but just in case
+      startWiFiSetup();
+      break;
+      
+    case WIFI_CONNECTING:
+      // Check if connected
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("Connected to WiFi!");
+        wifiState = WIFI_CONNECTED;
+        
+        // Set up post-connection stuff
+        setupPostWiFiConnection();
+      } else if (millis() - wifiOperationStartTime > 20000) {
+        // Timeout after 20 seconds of connection attempts
+        Serial.println("Connection timed out, starting portal");
+        
+        // Start the portal in non-blocking mode
+        if (wifiManager.startConfigPortal(securityConfig.apName.c_str())) {
+          // This will only execute if the portal config is saved
+          wifiState = WIFI_CONNECTED;
+        } else {
+          // Portal started, waiting for user input
+          wifiState = WIFI_PORTAL_ACTIVE;
+          wifiOperationStartTime = millis();
+        }
+      }
+      break;
+      
+    case WIFI_PORTAL_ACTIVE:
+      // Process the portal
+      wifiManager.process();
+      
+      // Animate the display
+      if (millis() - lastPortalAnimationTime > 50) {  // Control animation speed
+        lastPortalAnimationTime = millis();
+        if (disp.displayAnimate()) {
+          disp.displayReset();
+        }
+      }
+      
+      // Check for timeout
+      if (millis() - wifiOperationStartTime > 180000) {  // 3 minutes timeout
+        Serial.println("Portal timed out");
+        wifiState = WIFI_FAILED;
+      }
+      
+      // Check if connected (portal was successful)
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("Connected to WiFi via portal!");
+        wifiState = WIFI_CONNECTED;
+        
+        // Set up post-connection stuff
+        setupPostWiFiConnection();
+      }
+      break;
+      
+    case WIFI_CONNECTED:
+      // Already connected, nothing to do
+      break;
+      
+    case WIFI_FAILED:
+      // Already failed, nothing to do
+      // You could restart here if needed
+      break;
   }
-  
-  // If we got here, we're connected to WiFi
-  // Display connection details
+}
+
+void setupPostWiFiConnection() {
+    // This contains the code that runs after a successful WiFi connection
   String ip = WiFi.localIP().toString();
   String ssid = WiFi.SSID();
   String hostname = securityConfig.hostname;
@@ -105,9 +178,13 @@ void setupWiFi() {
   disp.displayText(ipDisplayConfig.text.c_str(), PA_LEFT, 40, 1000, PA_SCROLL_LEFT, PA_SCROLL_LEFT);
   
   // Load the user's actual config in the background
-  // (will be used after IP display timeout)
   loadConfig();
 }
+
+bool isWiFiSetupComplete() {
+    return (wifiState == WIFI_CONNECTED || wifiState == WIFI_FAILED);
+}
+
 
 bool validateApiKey(AsyncWebServerRequest *request) {
   // Check for API key in header

@@ -1,0 +1,20 @@
+Item 0 duration elapsed: 1001ms, Target duration: 1000ms
+Free heap: 218472 bytes
+
+Item 1 duration elapsed: 10001ms, Target duration: 10000ms
+Free heap: 218140 bytes
+
+Item 2 duration elapsed: 1004ms, Target duration: 1000ms
+Free heap: 217816 bytes
+
+Item 0 duration elapsed: 1002ms, Target duration: 1000ms
+Free heap: 217816 bytes
+
+Item 1 duration elapsed: 10001ms, Target duration: 10000ms
+Free heap: 217488 bytes
+
+Item 2 duration elapsed: 1003ms, Target duration: 1000ms
+Free heap: 217164 bytes
+
+Item 0 duration elapsed: 1004ms, Target duration: 1000ms
+Free heap: 217164 bytes

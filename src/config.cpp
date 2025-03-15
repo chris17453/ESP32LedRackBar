@@ -1,6 +1,7 @@
-#include "config.h"
-#include "defaults.h"
-#include "display.h"
+#include "includes/config.h"
+#include "includes/defaults.h"
+#include "includes/display.h"
+#include "includes/utils.h"
 
 // Initialize global variables
 DisplayConfig config;
@@ -50,19 +51,39 @@ void loadConfig() {
         item.mode = "text";  // Default mode
       }
       
-      item.text = itemObj["text"].as<String>();
-      if (item.text.length() == 0 && item.mode == "text") {
-        item.text = "ESP32 LED Display";  // Default text
+      // Load mode-specific parameters
+      if (item.mode == "text") {
+        item.text = itemObj["text"].as<String>();
+        if (item.text.length() == 0) {
+          item.text = "ESP32 LED Display";  // Default text
+        }
+        item.alignment = itemObj["alignment"] | PA_SCROLL_LEFT;
+        item.scrollSpeed = itemObj["scrollSpeed"] | DEFAULT_SCROLL_SPEED;
+        item.pauseTime = itemObj["pauseTime"] | DEFAULT_PAUSE_TIME;
+      }
+      else if (item.mode == "twinkle") {
+        item.twinkleDensity = itemObj["twinkleDensity"] | DEFAULT_TWINKLE_DENSITY;
+        item.twinkleMinSpeed = itemObj["twinkleMinSpeed"] | DEFAULT_TWINKLE_MIN_SPEED;
+        item.twinkleMaxSpeed = itemObj["twinkleMaxSpeed"] | DEFAULT_TWINKLE_MAX_SPEED;
+      }
+      else if (item.mode == "knightrider") {
+        item.knightRiderSpeed = itemObj["knightRiderSpeed"] | 50;
+        item.knightRiderTailLength = itemObj["knightRiderTailLength"] | 3;
+      }
+      else if (item.mode == "pong") {
+        item.pongSpeed = itemObj["pongSpeed"] | 100;
+        item.pongBallSpeedX = itemObj["pongBallSpeedX"] | 0.5;
+        item.pongBallSpeedY = itemObj["pongBallSpeedY"] | 0.25;
+      }
+      else if (item.mode == "sinewave") {
+        item.sineWaveSpeed = itemObj["sineWaveSpeed"] | 50;
+        item.sineWaveAmplitude = itemObj["sineWaveAmplitude"] | 3;
+        item.sineWavePhases = itemObj["sineWavePhases"] | 3;
       }
       
-      item.alignment = itemObj["alignment"] | PA_SCROLL_LEFT;
+      // Load common parameters
       item.invert = itemObj["invert"] | false;
       item.brightness = itemObj["brightness"] | DEFAULT_BRIGHTNESS;
-      item.scrollSpeed = itemObj["scrollSpeed"] | DEFAULT_SCROLL_SPEED;
-      item.pauseTime = itemObj["pauseTime"] | DEFAULT_PAUSE_TIME;
-      item.twinkleDensity = itemObj["twinkleDensity"] | DEFAULT_TWINKLE_DENSITY;
-      item.twinkleMinSpeed = itemObj["twinkleMinSpeed"] | DEFAULT_TWINKLE_MIN_SPEED;
-      item.twinkleMaxSpeed = itemObj["twinkleMaxSpeed"] | DEFAULT_TWINKLE_MAX_SPEED;
       item.duration = itemObj["duration"] | 0;  // Default: show forever
       item.playCount = itemObj["playCount"] | 0;
       item.maxPlays = itemObj["maxPlays"] | 0;  // 0 = unlimited plays
@@ -119,20 +140,41 @@ void saveConfig() {
   for (const DisplayItem& item : config.items) {
     JsonObject itemObj = itemsArray.createNestedObject();
     
+    // Save common parameters
     itemObj["mode"] = item.mode;
-    itemObj["text"] = item.text;
-    itemObj["alignment"] = item.alignment;
     itemObj["invert"] = item.invert;
     itemObj["brightness"] = item.brightness;
-    itemObj["scrollSpeed"] = item.scrollSpeed;
-    itemObj["pauseTime"] = item.pauseTime;
-    itemObj["twinkleDensity"] = item.twinkleDensity;
-    itemObj["twinkleMinSpeed"] = item.twinkleMinSpeed;
-    itemObj["twinkleMaxSpeed"] = item.twinkleMaxSpeed;
     itemObj["duration"] = item.duration;
     itemObj["playCount"] = item.playCount;
     itemObj["maxPlays"] = item.maxPlays;
     itemObj["deleteAfterPlay"] = item.deleteAfterPlay;
+    
+    // Save mode-specific parameters
+    if (item.mode == "text") {
+      itemObj["text"] = item.text;
+      itemObj["alignment"] = item.alignment;
+      itemObj["scrollSpeed"] = item.scrollSpeed;
+      itemObj["pauseTime"] = item.pauseTime;
+    }
+    else if (item.mode == "twinkle") {
+      itemObj["twinkleDensity"] = item.twinkleDensity;
+      itemObj["twinkleMinSpeed"] = item.twinkleMinSpeed;
+      itemObj["twinkleMaxSpeed"] = item.twinkleMaxSpeed;
+    }
+    else if (item.mode == "knightrider") {
+      itemObj["knightRiderSpeed"] = item.knightRiderSpeed;
+      itemObj["knightRiderTailLength"] = item.knightRiderTailLength;
+    }
+    else if (item.mode == "pong") {
+      itemObj["pongSpeed"] = item.pongSpeed;
+      itemObj["pongBallSpeedX"] = item.pongBallSpeedX;
+      itemObj["pongBallSpeedY"] = item.pongBallSpeedY;
+    }
+    else if (item.mode == "sinewave") {
+      itemObj["sineWaveSpeed"] = item.sineWaveSpeed;
+      itemObj["sineWaveAmplitude"] = item.sineWaveAmplitude;
+      itemObj["sineWavePhases"] = item.sineWavePhases;
+    }
   }
   
   if (serializeJson(doc, file) == 0) {
@@ -145,7 +187,6 @@ void saveConfig() {
 }
 
 // In config.cpp, update the resetConfig function to set a default duration
-
 void resetConfig() {
   Serial.println("⚠️ Resetting config to default...");
   
@@ -156,24 +197,50 @@ void resetConfig() {
   config.itemStartTime = 0;
   config.items.clear();
   
-  // Add default item
-  DisplayItem defaultItem;
-  defaultItem.mode = "text";
-  defaultItem.text = "Connect to " + securityConfig.apName + " WiFi - Go to 192.168.4.1";
-  defaultItem.alignment = PA_SCROLL_LEFT;
-  defaultItem.invert = false;
-  defaultItem.brightness = DEFAULT_BRIGHTNESS;
-  defaultItem.scrollSpeed = DEFAULT_SCROLL_SPEED;
-  defaultItem.pauseTime = DEFAULT_PAUSE_TIME;
-  defaultItem.twinkleDensity = DEFAULT_TWINKLE_DENSITY;
-  defaultItem.twinkleMinSpeed = DEFAULT_TWINKLE_MIN_SPEED;
-  defaultItem.twinkleMaxSpeed = DEFAULT_TWINKLE_MAX_SPEED;
-  defaultItem.duration = 10000;  // 10 seconds default duration
-  defaultItem.playCount = 0;
-  defaultItem.maxPlays = 0;
-  defaultItem.deleteAfterPlay = false;
+  // Add default text item
+  DisplayItem textItem;
+  textItem.mode = "text";
+  textItem.text = "Connect to " + securityConfig.apName + " WiFi - Go to 192.168.4.1";
+  textItem.alignment = PA_SCROLL_LEFT;
+  textItem.invert = false;
+  textItem.brightness = DEFAULT_BRIGHTNESS;
+  textItem.scrollSpeed = DEFAULT_SCROLL_SPEED;
+  textItem.pauseTime = DEFAULT_PAUSE_TIME;
+  textItem.duration = 10000;  // 10 seconds default duration
+  textItem.playCount = 0;
+  textItem.maxPlays = 0;
+  textItem.deleteAfterPlay = false;
   
-  config.items.push_back(defaultItem);
+  config.items.push_back(textItem);
+  
+  // Add a twinkle effect item
+  DisplayItem twinkleItem;
+  twinkleItem.mode = "twinkle";
+  twinkleItem.invert = false;
+  twinkleItem.brightness = DEFAULT_BRIGHTNESS;
+  twinkleItem.twinkleDensity = DEFAULT_TWINKLE_DENSITY;
+  twinkleItem.twinkleMinSpeed = DEFAULT_TWINKLE_MIN_SPEED;
+  twinkleItem.twinkleMaxSpeed = DEFAULT_TWINKLE_MAX_SPEED;
+  twinkleItem.duration = 5000;  // 5 seconds
+  twinkleItem.playCount = 0;
+  twinkleItem.maxPlays = 0;
+  twinkleItem.deleteAfterPlay = false;
+  
+  config.items.push_back(twinkleItem);
+  
+  // Add a Knight Rider effect item
+  DisplayItem knightRiderItem;
+  knightRiderItem.mode = "knightrider";
+  knightRiderItem.invert = false;
+  knightRiderItem.brightness = DEFAULT_BRIGHTNESS;
+  knightRiderItem.knightRiderSpeed = 50;
+  knightRiderItem.knightRiderTailLength = 3;
+  knightRiderItem.duration = 5000;  // 5 seconds
+  knightRiderItem.playCount = 0;
+  knightRiderItem.maxPlays = 0;
+  knightRiderItem.deleteAfterPlay = false;
+  
+  config.items.push_back(knightRiderItem);
   
   saveConfig();
 }
@@ -271,12 +338,12 @@ void factoryReset() {
       // Initialize WiFi if not already done
       WiFi.mode(WIFI_MODE_STA);
       Serial.println("WiFi set to station mode");
-      delay(200); // Give it more time to initialize
+      delayWithWatchdog(200); // Give it more time to initialize
       
-      // Perform the disconnect with longer delay
+      // Perform the disconnect with longer delayWithWatchdog
       Serial.println("Attempting WiFi.disconnect()...");
       bool wifiDisconnectResult = WiFi.disconnect(true, true);
-      delay(500); // Allow more time for the operation to complete
+      delayWithWatchdog(500); // Allow more time for the operation to complete
       
       if (wifiDisconnectResult) {
         Serial.println("WiFi credentials cleared successfully");
@@ -309,9 +376,9 @@ void factoryReset() {
         // Final attempt - restart WiFi subsystem
         Serial.println("Restarting WiFi subsystem...");
         WiFi.mode(WIFI_OFF);
-        delay(500);
+        delayWithWatchdog(500);
         WiFi.mode(WIFI_STA);
-        delay(500);
+        delayWithWatchdog(500);
       }
     } catch (...) {
       Serial.println("ERROR: Exception while clearing WiFi credentials");
@@ -413,7 +480,7 @@ void factoryReset() {
   
   Serial.println("Factory reset completed, waiting before restart...");
   // Give the system time to finish all operations and serial output to complete
-  delay(2000);
+  delayWithWatchdog(2000);
   
   Serial.println("Restarting device...");
   // Restart the device
@@ -421,6 +488,10 @@ void factoryReset() {
 }
 
 void checkFactoryResetCondition() {
+  if (FACTORY_RESET_DISABLED==true) {
+    Serial.println("========== Factory Reset Disabled ==========");
+    return;
+  }
   preferences.begin("powercycle", false);
   
   // Get stored values

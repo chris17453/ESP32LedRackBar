@@ -1,9 +1,10 @@
-#include "api.h"
-#include "defaults.h"
-#include "wifi_manager.h"
-#include "config.h"
-#include "effects.h"
-#include "display.h"
+#include "includes/api.h"
+#include "includes/defaults.h"
+#include "includes/wifi_manager.h"
+#include "includes/config.h"
+#include "includes/effects.h"
+#include "includes/display.h"
+#include "includes/utils.h"
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
@@ -276,31 +277,67 @@ server.on("/items_replace", HTTP_POST, [](AsyncWebServerRequest *request) {
   for (JsonObject itemObj : doc["items"].as<JsonArray>()) {
     DisplayItem item;
     
+    // Get the mode with "text" as default
     item.mode = itemObj["mode"] | "text";
-    item.text = itemObj["text"] | "New Item";
     
-    String alignment = itemObj["alignment"] | "scroll_left";
-    if (alignment == "left") {
-      item.alignment = PA_LEFT;
-    } else if (alignment == "right") {
-      item.alignment = PA_RIGHT;
-    } else if (alignment == "center") {
-      item.alignment = PA_CENTER;
-    } else if (alignment == "scroll_left") {
-      item.alignment = PA_SCROLL_LEFT;
-    } else if (alignment == "scroll_right") {
-      item.alignment = PA_SCROLL_RIGHT;
-    } else {
+    // Handle mode-specific parameters
+    if (item.mode == "text") {
+      item.text = itemObj["text"] | "New Item";
+      
+      String alignment = itemObj["alignment"] | "scroll_left";
+      if (alignment == "left") {
+        item.alignment = PA_LEFT;
+      } else if (alignment == "right") {
+        item.alignment = PA_RIGHT;
+      } else if (alignment == "center") {
+        item.alignment = PA_CENTER;
+      } else if (alignment == "scroll_left") {
+        item.alignment = PA_SCROLL_LEFT;
+      } else if (alignment == "scroll_right") {
+        item.alignment = PA_SCROLL_RIGHT;
+      } else {
+        item.alignment = PA_SCROLL_LEFT;
+      }
+      
+      item.scrollSpeed = itemObj["scrollSpeed"] | DEFAULT_SCROLL_SPEED;
+      item.pauseTime = itemObj["pauseTime"] | DEFAULT_PAUSE_TIME;
+    } 
+    else if (item.mode == "twinkle") {
+      // Twinkle effect parameters
+      item.twinkleDensity = itemObj["twinkleDensity"] | DEFAULT_TWINKLE_DENSITY;
+      item.twinkleMinSpeed = itemObj["twinkleMinSpeed"] | DEFAULT_TWINKLE_MIN_SPEED;
+      item.twinkleMaxSpeed = itemObj["twinkleMaxSpeed"] | DEFAULT_TWINKLE_MAX_SPEED;
+    }
+    else if (item.mode == "knightrider") {
+      // Knight Rider effect parameters
+      item.knightRiderSpeed = itemObj["knightRiderSpeed"] | 50; // Default 50ms update interval
+      item.knightRiderTailLength = itemObj["knightRiderTailLength"] | 3; // Default tail length of 3
+    }
+    else if (item.mode == "pong") {
+      // Pong effect parameters
+      item.pongSpeed = itemObj["pongSpeed"] | 100; // Default 100ms update interval
+      item.pongBallSpeedX = itemObj["pongBallSpeedX"] | 0.5; // Default horizontal speed
+      item.pongBallSpeedY = itemObj["pongBallSpeedY"] | 0.25; // Default vertical speed
+    }
+    else if (item.mode == "sinewave") {
+      // Sine wave effect parameters
+      item.sineWaveSpeed = itemObj["sineWaveSpeed"] | 50; // Default 50ms update interval
+      item.sineWaveAmplitude = itemObj["sineWaveAmplitude"] | 3; // Default amplitude
+      item.sineWavePhases = itemObj["sineWavePhases"] | 3; // Default number of phases
+    }
+    else {
+      // If an unknown mode is specified, default to text
+      Serial.print("⚠️ Unknown mode: '");
+      Serial.print(item.mode);
+      Serial.println("', defaulting to 'text'");
+      item.mode = "text";
+      item.text = "Unknown Mode";
       item.alignment = PA_SCROLL_LEFT;
     }
     
+    // Common parameters for all modes
     item.invert = itemObj["invert"] | false;
     item.brightness = itemObj["brightness"] | DEFAULT_BRIGHTNESS;
-    item.scrollSpeed = itemObj["scrollSpeed"] | DEFAULT_SCROLL_SPEED;
-    item.pauseTime = itemObj["pauseTime"] | DEFAULT_PAUSE_TIME;
-    item.twinkleDensity = itemObj["twinkleDensity"] | DEFAULT_TWINKLE_DENSITY;
-    item.twinkleMinSpeed = itemObj["twinkleMinSpeed"] | DEFAULT_TWINKLE_MIN_SPEED;
-    item.twinkleMaxSpeed = itemObj["twinkleMaxSpeed"] | DEFAULT_TWINKLE_MAX_SPEED;
     item.duration = itemObj["duration"] | 0;
     item.playCount = itemObj["playCount"] | 0;
     item.maxPlays = itemObj["maxPlays"] | 0;
@@ -314,13 +351,34 @@ server.on("/items_replace", HTTP_POST, [](AsyncWebServerRequest *request) {
     Serial.print(": Mode='");
     Serial.print(item.mode);
     Serial.print("'");
+    
+    // Log mode-specific details
     if (item.mode == "text") {
       Serial.print(", Text='");
       Serial.print(item.text);
       Serial.print("'");
+    } 
+    else if (item.mode == "twinkle") {
+      Serial.print(", Density=");
+      Serial.print(item.twinkleDensity);
     }
-    Serial.print(", Alignment=");
-    Serial.print(alignment);
+    else if (item.mode == "knightrider") {
+      Serial.print(", Speed=");
+      Serial.print(item.knightRiderSpeed);
+      Serial.print(", TailLength=");
+      Serial.print(item.knightRiderTailLength);
+    }
+    else if (item.mode == "pong") {
+      Serial.print(", Speed=");
+      Serial.print(item.pongSpeed);
+    }
+    else if (item.mode == "sinewave") {
+      Serial.print(", Speed=");
+      Serial.print(item.sineWaveSpeed);
+      Serial.print(", Amplitude=");
+      Serial.print(item.sineWaveAmplitude);
+    }
+    
     Serial.print(", Duration=");
     Serial.print(item.duration);
     Serial.println("ms");
@@ -399,7 +457,6 @@ server.on("/items_replace", HTTP_POST, [](AsyncWebServerRequest *request) {
   Serial.println("🚩 Update flag set to false");
   Serial.println("=========== ITEMS REPLACE API COMPLETED ===========\n");
 });
-  
   // Delete a specific item
   server.on("/items/delete", HTTP_POST, [](AsyncWebServerRequest *request) {
     // Validate API key
@@ -656,9 +713,9 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     }
     
     request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"Factory reset initiated\"}");
-    // Slight delay to allow response to be sent
+    // Slight delayWithWatchdog to allow response to be sent
     updateInProgress = true;
-    delay(500);
+    delayWithWatchdog(500);
 
     factoryReset();
     updateInProgress = false;
@@ -865,11 +922,7 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
         // Signal that display needs to be updated
         textNeedsUpdate = true;
         
-        // If switching to twinkle mode, initialize new twinkle states
-        if (currentItem.mode == "twinkle") {
-          // Use our safe reinitialization function
-          safeReinitTwinkle();
-        }
+
       }
       
       request->send(200, "application/json", "{\"status\":\"success\"}");
@@ -954,8 +1007,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     // Send success response first so client gets it before we reset
     request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"Manual factory reset initiated\"}");
     
-    // Short delay to allow response to be sent
-    delay(500);
+    // Short delayWithWatchdog to allow response to be sent
+    delayWithWatchdog(500);
     
     // Perform a simplified factory reset
     Serial.println("⚠️ MANUAL FACTORY RESET INITIATED ⚠️");
@@ -1010,11 +1063,11 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"WiFi settings updated, reconnecting...\"}");
     
     // Wait a moment to ensure response is sent
-    delay(500);
+    delayWithWatchdog(500);
     
     // Configure the WiFi with new credentials
     WiFi.disconnect();
-    delay(1000);
+    delayWithWatchdog(1000);
     
     // Store the credentials in WiFi (they will be automatically used on restart)
     WiFi.begin(ssid.c_str(), password.c_str());
@@ -1022,7 +1075,7 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     // Wait for a connection attempt
     unsigned long startAttempt = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 10000) {
-      delay(500);
+      delayWithWatchdog(500);
       Serial.print(".");
     }
     
@@ -1123,8 +1176,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     // Send success response before rebooting
     request->send(200, "application/json", "{\"status\":\"success\",\"message\":\"Device is rebooting\"}");
     
-    // Short delay to allow response to be sent
-    delay(500);
+    // Short delayWithWatchdog to allow response to be sent
+    delayWithWatchdog(500);
     
     // Display reboot message
     disp.displayClear();
@@ -1134,8 +1187,8 @@ server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request) {
     // Log reboot
     Serial.println("⚠️ Device reboot initiated via API");
     
-    // Small delay to show the message
-    delay(1000);
+    // Small delayWithWatchdog to show the message
+    delayWithWatchdog(1000);
     
     // Restart the device
     ESP.restart();

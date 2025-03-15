@@ -1,6 +1,6 @@
 # Makefile for LED Matrix Client Testing
 # Host configuration
-HOST = 192.168.1.205
+HOST = 192.168.1.97
 API_KEY = WatkinsLabsLEDRack2025
 
 # Python script path

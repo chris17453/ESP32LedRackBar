@@ -24,4 +24,8 @@
 // Display timing parameters
 #define IP_DISPLAY_DURATION 15000      // Show IP for 15 seconds
 
+#define WIFI_ENABLED true
+#define WATCHDOG_RESET_TIMEOUT 8        // in seconds
+#define FACTORY_RESET_DISABLED false     //prevents config from be erased after 3 reboots in 30 seconds
+
 #endif // DEFAULTS_H

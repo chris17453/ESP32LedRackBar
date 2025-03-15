@@ -1,6 +1,7 @@
-#include "display.h"
-#include "defaults.h"
-#include "effects.h"
+#include "includes/display.h"
+#include "includes/defaults.h"
+#include "includes/effects.h"
+#include "includes/utils.h"
 
 // Initialize global display object
 MD_Parola disp = MD_Parola(HARDWARE_TYPE, CS_PIN, MAX_DEVICES);
@@ -25,8 +26,8 @@ void initDisplay() {
   // Force update to ensure clean state
   disp.getGraphicObject()->update();
   
-  // Small delay to ensure display is ready
-  delay(50);
+  // Small delayWithWatchdog to ensure display is ready
+  delayWithWatchdog(50);
   
   // Show a simple "Starting" message
   disp.setTextAlignment(PA_CENTER);
@@ -38,7 +39,7 @@ void clearDisplayForModeChange(String oldMode, String newMode) {
   if (oldMode.length() == 0) oldMode = "unknown";
   if (newMode.length() == 0) newMode = "text";  // Default to text mode if empty
   
-  Serial.println("Mode changing from " + oldMode + " to " + newMode);
+  //Serial.println("Mode changing from " + oldMode + " to " + newMode);
   
   // Complete reset of the display
   disp.displayClear();
@@ -66,12 +67,7 @@ void clearDisplayForModeChange(String oldMode, String newMode) {
     }
   }
   
-  // Wait a bit longer to ensure the display is fully cleared and ready
-  delay(200);
-  
-  // One final clear to be absolutely sure
-  disp.displayClear();
-  delay(50);
+
 }
 
 void updateDisplay() {
